@@ -161,7 +161,7 @@ impl IosDevice {
             .1;
         let remote_path = app["Path"].to_string();
 
-        let tunnel = process::Command::new("sudo")
+        let mut tunnel = process::Command::new("sudo")
             .arg("-p")
             .arg(format!(
                 "Please enter %p's password on %h to start a tunnel to '{}' (sudo):",
@@ -174,8 +174,11 @@ impl IosDevice {
             .stdout(Stdio::piped())
             .spawn()?;
         let mut rsd = String::new();
-        BufReader::new(tunnel.stdout.unwrap()).read_line(&mut rsd)?;
+        BufReader::new(tunnel.stdout.as_mut().unwrap()).read_line(&mut rsd)?;
         debug!("iOS RSD tunnel started: {rsd}");
+
+        // Kill tunnel process to avoid hanging in case it is not run in a terminal (SSH command)
+        tunnel.kill()?;
 
         // start the debugserver
         let server = process::Command::new("pymobiledevice3")
