@@ -17,7 +17,7 @@ use log::debug;
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::Formatter;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{self, Stdio};
 use std::time::Duration;
@@ -160,7 +160,6 @@ impl IosDevice {
             .unwrap()
             .1;
         let remote_path = app["Path"].to_string();
-
         let mut tunnel = process::Command::new("sudo")
             .arg("-p")
             .arg(format!(
@@ -169,8 +168,8 @@ impl IosDevice {
             ))
             .args("pymobiledevice3 remote start-tunnel --script-mode --udid".split_whitespace())
             .arg(&self.id)
-            .stderr(Stdio::inherit())
-            .stdin(Stdio::inherit())
+            .stderr(Stdio::null())
+            .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .spawn()?;
         let mut rsd = String::new();
@@ -178,6 +177,7 @@ impl IosDevice {
         debug!("iOS RSD tunnel started: {rsd}");
 
         // Kill tunnel process to avoid hanging in case it is not run in a terminal (SSH command)
+        std::io::stdout().flush().unwrap();
         tunnel.kill()?;
 
         // start the debugserver
