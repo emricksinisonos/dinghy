@@ -1,7 +1,6 @@
 use super::{xcode, AppleSimulatorType};
 use crate::apple::AppleDevicePlatform;
 use crate::device::make_remote_app_with_name;
-use crate::errors::*;
 use crate::project::Project;
 use crate::utils::LogCommandExt;
 use crate::utils::{get_current_verbosity, user_facing_log};
@@ -10,6 +9,7 @@ use crate::BuildBundle;
 use crate::Device;
 use crate::DeviceCompatibility;
 use crate::Runnable;
+use crate::{errors::*, DeviceConnection};
 use colored::Colorize;
 use fs_err as fs;
 use itertools::Itertools;
@@ -21,6 +21,14 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{self, Stdio};
 use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IosTunnel {
+    pub address: String,
+    pub port: String,
+}
 
 #[derive(Clone, Debug)]
 pub struct IosDevice {
@@ -140,6 +148,7 @@ impl IosDevice {
         args: &[&str],
         envs: &[&str],
         debugger: bool,
+        tunnel: Option<IosTunnel>,
     ) -> Result<()> {
         if self.is_pre_ios_17()? {
             return self.run_remote_with_ios_deploy(build_bundle, args, envs, debugger);
@@ -160,25 +169,30 @@ impl IosDevice {
             .unwrap()
             .1;
         let remote_path = app["Path"].to_string();
-        let mut tunnel = process::Command::new("sudo")
-            .arg("-p")
-            .arg(format!(
-                "Please enter %p's password on %h to start a tunnel to '{}' (sudo):",
-                self.name
-            ))
-            .args("pymobiledevice3 remote start-tunnel --script-mode --udid".split_whitespace())
-            .arg(&self.id)
-            .stderr(Stdio::null())
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .spawn()?;
-        let mut rsd = String::new();
-        BufReader::new(tunnel.stdout.as_mut().unwrap()).read_line(&mut rsd)?;
-        debug!("iOS RSD tunnel started: {rsd}");
 
-        // Kill tunnel process to avoid hanging in case it is not run in a terminal (SSH command)
-        std::io::stdout().flush().unwrap();
-        tunnel.kill()?;
+        let mut rsd = String::new();
+        if let Some(existing_tunnel) = tunnel {
+            rsd = format!("{} {}", existing_tunnel.address, existing_tunnel.port);
+        } else {
+            let mut tunnel = process::Command::new("sudo")
+                .arg("-p")
+                .arg(format!(
+                    "Please enter %p's password on %h to start a tunnel to '{}' (sudo):",
+                    self.name
+                ))
+                .args("pymobiledevice3 remote start-tunnel --script-mode --udid".split_whitespace())
+                .arg(&self.id)
+                .stderr(Stdio::null())
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .spawn()?;
+            BufReader::new(tunnel.stdout.as_mut().unwrap()).read_line(&mut rsd)?;
+            debug!("iOS RSD tunnel started: {rsd}");
+
+            // Kill tunnel process to avoid hanging in case it is not run in a terminal (SSH command)
+            std::io::stdout().flush().unwrap();
+            tunnel.kill()?;
+        }
 
         // start the debugserver
         let server = process::Command::new("pymobiledevice3")
@@ -318,7 +332,7 @@ impl Device for IosDevice {
                 0,
             );
         }
-        self.run_remote(&build_bundle, args, envs, true)?;
+        self.run_remote(&build_bundle, args, envs, true, None)?;
         Ok(build_bundle)
     }
 
@@ -336,6 +350,7 @@ impl Device for IosDevice {
         build: &Build,
         args: &[&str],
         envs: &[&str],
+        device_connection: DeviceConnection,
     ) -> Result<BuildBundle> {
         let build_bundle = self.install_app(project, build, &build.runnable)?;
         if get_current_verbosity() < 1 {
@@ -347,7 +362,12 @@ impl Device for IosDevice {
                 0,
             );
         }
-        self.run_remote(&build_bundle, args, envs, false)?;
+
+        let ios_tunnel = match device_connection {
+            DeviceConnection::None => None,
+            DeviceConnection::Ios(ios_tunnel) => Some(ios_tunnel),
+        };
+        self.run_remote(&build_bundle, args, envs, false, ios_tunnel)?;
         Ok(build_bundle)
     }
 }
@@ -450,6 +470,7 @@ impl Device for AppleSimDevice {
         build: &Build,
         args: &[&str],
         envs: &[&str],
+        _device_connection: DeviceConnection,
     ) -> Result<BuildBundle> {
         let build_bundle = self.install_app(&project, &build, &build.runnable)?;
         if get_current_verbosity() < 1 {
@@ -534,7 +555,6 @@ fn make_apple_app(
 }
 
 fn launch_app(dev: &AppleSimDevice, app_args: &[&str], _envs: &[&str]) -> Result<()> {
-    use std::io::Write;
     let dir = tempfile::TempDir::with_prefix("mobiledevice-rs-lldb")?;
     let tmppath = dir.path();
     let mut install_path = String::from_utf8(
@@ -631,7 +651,6 @@ fn launch_lldb_simulator(
     envs: &[&str],
     debugger: bool,
 ) -> Result<()> {
-    use std::io::Write;
     use std::process::Command;
     let dir = tempfile::TempDir::with_prefix("mobiledevice-rs-lldb")?;
     let tmppath = dir.path();

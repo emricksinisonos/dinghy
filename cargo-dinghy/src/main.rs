@@ -11,11 +11,11 @@ use cargo_metadata::Message;
 use log::{debug, error, info};
 
 use dinghy_lib::config::dinghy_config;
-use dinghy_lib::errors::*;
 use dinghy_lib::project::Project;
 use dinghy_lib::utils::{set_current_verbosity, user_facing_log, LogCommandExt};
 use dinghy_lib::Dinghy;
 use dinghy_lib::Platform;
+use dinghy_lib::{errors::*, DeviceConnection};
 use dinghy_lib::{Build, SetupArgs};
 use dinghy_lib::{Device, Runnable};
 
@@ -190,8 +190,11 @@ fn run_command(cli: DinghyCli) -> Result<()> {
                 }
 
                 let bundle = device.run_app(
-                    &project, &build, &args_ref,
+                    &project,
+                    &build,
+                    &args_ref,
                     &envs_ref, // TODO these are also in the SetupArgs
+                    DeviceConnection::None,
                 )?;
 
                 // TODO this is not done if the run fails

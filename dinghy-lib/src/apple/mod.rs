@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 
-pub use self::device::{AppleSimDevice, IosDevice};
+pub use self::device::{AppleSimDevice, IosDevice, IosTunnel};
 pub use self::platform::AppleDevicePlatform;
 use crate::{Device, Platform, PlatformManager, Result};
 use itertools::Itertools;

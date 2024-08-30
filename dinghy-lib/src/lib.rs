@@ -26,6 +26,7 @@ use crate::config::PlatformConfiguration;
 use crate::platform::regular_platform::RegularPlatform;
 use crate::project::Project;
 use anyhow::{anyhow, Context};
+pub use apple::IosTunnel;
 use dyn_clone::DynClone;
 use std::fmt::Display;
 use std::{path, sync};
@@ -135,6 +136,11 @@ impl Dinghy {
     }
 }
 
+pub enum DeviceConnection {
+    None,
+    Ios(IosTunnel),
+}
+
 pub trait Device: std::fmt::Debug + Display + DeviceCompatibility + DynClone {
     fn clean_app(&self, build_bundle: &BuildBundle) -> Result<()>;
 
@@ -156,6 +162,7 @@ pub trait Device: std::fmt::Debug + Display + DeviceCompatibility + DynClone {
         build: &Build,
         args: &[&str],
         envs: &[&str],
+        device_connection: DeviceConnection,
     ) -> Result<BuildBundle>;
 }
 

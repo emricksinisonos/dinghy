@@ -54,6 +54,7 @@ impl Device for ScriptDevice {
         build: &Build,
         args: &[&str],
         envs: &[&str],
+        _device_connection: DeviceConnection,
     ) -> Result<BuildBundle> {
         let root_dir = build.target_path.join("dinghy");
         let bundle_path = &build.runnable.source;

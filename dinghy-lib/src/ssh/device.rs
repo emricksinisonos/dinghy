@@ -1,6 +1,5 @@
 use crate::config::SshDeviceConfiguration;
 use crate::device::make_remote_app;
-use crate::errors::*;
 use crate::host::HostPlatform;
 use crate::platform::regular_platform::RegularPlatform;
 use crate::project::Project;
@@ -9,6 +8,7 @@ use crate::Build;
 use crate::BuildBundle;
 use crate::Device;
 use crate::DeviceCompatibility;
+use crate::{errors::*, DeviceConnection};
 use std::fmt;
 use std::fmt::Formatter;
 use std::fmt::{Debug, Display};
@@ -58,7 +58,7 @@ impl SshDevice {
             command.arg("-p").arg(&format!("{}", port));
         }
         if std::io::stdout().is_terminal() {
-            command.arg("-t").arg("-o").arg("LogLevel=QUIET");
+            command.arg("-T").arg("-o").arg("LogLevel=QUIET");
         }
         command.arg(format!("{}@{}", self.conf.username, self.conf.hostname));
         Ok(command)
@@ -210,6 +210,7 @@ impl Device for SshDevice {
         build: &Build,
         args: &[&str],
         envs: &[&str],
+        _device_connection: DeviceConnection,
     ) -> Result<BuildBundle> {
         let remote_shell_vars_as_context = |a: &str| -> Option<std::borrow::Cow<str>> {
             self.conf.remote_shell_vars.get(a).map(|s| s.into())

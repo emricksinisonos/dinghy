@@ -1,5 +1,4 @@
 use crate::device::make_remote_app;
-use crate::errors::*;
 use crate::platform::regular_platform::RegularPlatform;
 use crate::project::Project;
 use crate::utils::{get_current_verbosity, path_to_str, user_facing_log, LogCommandExt};
@@ -7,6 +6,7 @@ use crate::Build;
 use crate::BuildBundle;
 use crate::Device;
 use crate::DeviceCompatibility;
+use crate::{errors::*, DeviceConnection};
 use log::{debug, info, log_enabled};
 use std::io::Write;
 use std::{fmt, io, path, process};
@@ -228,6 +228,7 @@ impl Device for AndroidDevice {
         build: &Build,
         args: &[&str],
         envs: &[&str],
+        _device_connection: DeviceConnection,
     ) -> Result<BuildBundle> {
         let args: Vec<String> = args
             .iter()
