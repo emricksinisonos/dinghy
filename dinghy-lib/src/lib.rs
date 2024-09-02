@@ -26,7 +26,10 @@ use crate::config::PlatformConfiguration;
 use crate::platform::regular_platform::RegularPlatform;
 use crate::project::Project;
 use anyhow::{anyhow, Context};
+
+#[cfg(target_os = "macos")]
 pub use apple::IosTunnel;
+
 use dyn_clone::DynClone;
 use std::fmt::Display;
 use std::{path, sync};
@@ -138,6 +141,7 @@ impl Dinghy {
 
 pub enum DeviceConnection {
     None,
+    #[cfg(target_os = "macos")]
     Ios(IosTunnel),
 }
 
