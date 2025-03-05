@@ -2,11 +2,37 @@ use super::{AppleSimulatorType, SignatureSettings, SigningIdentity};
 use crate::errors::*;
 use fs_err as fs;
 use log::{debug, trace};
+use semver::Version;
 use std::io::Write;
+use std::process::Command;
 use std::{io, process};
 
 use crate::utils::LogCommandExt;
 use crate::BuildBundle;
+
+pub fn get_xcode_version() -> Result<Version> {
+    let output = Command::new("xcodebuild")
+        .arg("-version")
+        .output()
+        .context("Failed to execute xcodebuild command")?;
+
+    let version_output = String::from_utf8_lossy(&output.stdout);
+    let mut version_semver_str = version_output
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().last())
+        .unwrap_or("")
+        .to_string();
+
+    if version_semver_str.matches('.').count() < 2 {
+        version_semver_str.push_str(".0");
+    }
+
+    let version = Version::parse(&version_semver_str)
+        .context(format!("Could not parse version: {version_semver_str}"))?;
+
+    Ok(version)
+}
 
 pub fn add_plist_to_app(
     bundle: &BuildBundle,
