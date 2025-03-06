@@ -359,9 +359,9 @@ exit
         // Launch execution on the device
         let result = command
             .log_invocation(1)
-            .stdout(Stdio::inherit())
             .status()
             .context("Failed to run devicectl device install app")?;
+
         if !result.success() {
             bail!("Execution on device failed\n",)
         }
