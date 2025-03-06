@@ -135,7 +135,6 @@ pub fn look_for_signature_settings(device_id: &str) -> Result<Vec<SignatureSetti
             let subject = String::from_utf8(subject.stdout)?;
             if let Some(ou) = subject_regex.captures(&subject) {
                 identities.push(SigningIdentity {
-                    id: caps[1].into(),
                     name: caps[2].into(),
                     team: ou[1].into(),
                 })
@@ -235,7 +234,7 @@ pub fn look_for_signature_settings(device_id: &str) -> Result<Vec<SignatureSetti
             .collect::<Vec<&str>>()
             .join("\n");
         settings.push(SignatureSettings {
-            entitlements: entitlements,
+            entitlements,
             file: file
                 .path()
                 .to_str()
@@ -247,7 +246,6 @@ pub fn look_for_signature_settings(device_id: &str) -> Result<Vec<SignatureSetti
                 name.into()
             },
             identity: identity.clone(),
-            profile: file.path().to_str().unwrap().into(),
         });
     }
     Ok(settings)

@@ -19,12 +19,10 @@ pub struct SignatureSettings {
     pub file: String,
     pub entitlements: String,
     pub name: String,
-    pub profile: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct SigningIdentity {
-    pub id: String,
     pub name: String,
     pub team: String,
 }
