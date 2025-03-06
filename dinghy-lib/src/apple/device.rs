@@ -19,7 +19,7 @@ use semver::Version;
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::Formatter;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 use std::process::{self, Stdio};
 use std::time::Duration;
@@ -105,22 +105,27 @@ impl IosDevice {
     }
 
     fn new_install_app(&self, local_app_dir: &str) -> Result<String> {
-        let result = process::Command::new("xcrun")
+        // We use stderr as output file to avoid creating a file to collect the JSON output
+        // while keeping stdout output in terminal (in order to see the progress of the install)
+        let child = process::Command::new("xcrun")
             .args(
-                "devicectl device install app --quiet --json-output /dev/stdout --device"
+                "devicectl device install app --quiet --json-output /dev/stderr --device"
                     .split_whitespace(),
             )
             .arg(&self.id)
             .arg(local_app_dir)
             .log_invocation(1)
-            .output()
+            .stderr(Stdio::piped())
+            .spawn()
             .context("Failed to run devicectl device install app")?;
 
-        // Parse JSON output from the command from stdout
-        let output_str = std::str::from_utf8(&result.stdout)?;
+        let mut output_str = String::new();
+        BufReader::new(child.stderr.unwrap()).read_to_string(&mut output_str)?;
+
+        // Parse JSON output from the command from stderr
         let re = Regex::new(r"(?s)\{.*\}").unwrap();
         let output_json = re
-            .find(output_str)
+            .find(&output_str)
             .context("Couldn not find a valid JSON in command output")
             .and_then(|json_str| json::parse(json_str.as_str()).map_err(|err| anyhow!(err)))?;
 
@@ -442,7 +447,6 @@ impl Device for IosDevice {
         envs: &[&str],
     ) -> Result<BuildBundle> {
         let xcode_version = xcode::get_xcode_version()?;
-        dbg!(&xcode_version);
         if xcode_version > Version::new(16, 0, 0) {
             self.new_run_app(project, build, args, envs)
         } else {
