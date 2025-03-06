@@ -14,6 +14,8 @@ use colored::Colorize;
 use fs_err as fs;
 use itertools::Itertools;
 use log::debug;
+use regex::Regex;
+use semver::Version;
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -100,6 +102,41 @@ impl IosDevice {
 
         super::xcode::sign_app(&build_bundle, &signing)?;
         Ok(build_bundle)
+    }
+
+    fn new_install_app(&self, local_app_dir: &str) -> Result<String> {
+        let result = process::Command::new("xcrun")
+            .args(
+                "devicectl device install app --quiet --json-output /dev/stdout --device"
+                    .split_whitespace(),
+            )
+            .arg(&self.id)
+            .arg(local_app_dir)
+            .log_invocation(1)
+            .output()
+            .context("Failed to run devicectl device install app")?;
+
+        // Parse JSON output from the command from stdout
+        let output_str = std::str::from_utf8(&result.stdout)?;
+        let re = Regex::new(r"(?s)\{.*\}").unwrap();
+        let output_json = re
+            .find(output_str)
+            .context("Couldn not find a valid JSON in command output")
+            .and_then(|json_str| json::parse(json_str.as_str()).map_err(|err| anyhow!(err)))?;
+
+        // Get the installation URL path
+        let remote_path = output_json
+            .entries()
+            .find(|(k, _)| *k == "result")
+            .and_then(|(_, out)| out.entries().find(|(k, _)| *k == "installedApplications"))
+            .and_then(|(_, out)| out.members().last())
+            .and_then(|out| out.entries().find(|(k, _)| *k == "installationURL"))
+            .and_then(|(_, out)| out.as_str())
+            .ok_or(anyhow!(
+                "Couldn't extract remote app path from install app command"
+            ))?;
+
+        Ok(remote_path.to_string())
     }
 
     fn install_app(
@@ -291,6 +328,76 @@ exit
         }
         Ok(())
     }
+
+    fn new_run_remote(
+        &self,
+        remote_app_path: &str,
+        args: &[&str],
+        _envs: &[&str],
+        _debugger: bool,
+    ) -> Result<()> {
+        let mut command = process::Command::new("xcrun");
+
+        // Create devicectl command arguments
+        command
+            .args("devicectl device process launch --console -d".split_whitespace())
+            .arg(&self.id)
+            .arg(remote_app_path);
+
+        // Add CLI arguments
+        args.iter()
+            .map(|&s| shell_escape::escape(s.into()))
+            .for_each(|arg| {
+                command.arg(&*arg);
+            });
+
+        // Launch execution on the device
+        let result = command
+            .log_invocation(1)
+            .stdout(Stdio::inherit())
+            .status()
+            .context("Failed to run devicectl device install app")?;
+        if !result.success() {
+            bail!("Execution on device failed\n",)
+        }
+        Ok(())
+    }
+
+    fn run_app(
+        &self,
+        project: &Project,
+        build: &Build,
+        args: &[&str],
+        envs: &[&str],
+    ) -> Result<BuildBundle> {
+        let build_bundle = self.install_app(project, build, &build.runnable)?;
+        if get_current_verbosity() < 1 {
+            // we log the full command for verbosity > 1, just log a short message when the user
+            // didn't ask for verbose output
+            user_facing_log(
+                "Running",
+                &format!("{} on {}", build.runnable.id, self.id),
+                0,
+            );
+        }
+        self.run_remote(&build_bundle, args, envs, false)?;
+        Ok(build_bundle)
+    }
+
+    fn new_run_app(
+        &self,
+        project: &Project,
+        build: &Build,
+        args: &[&str],
+        envs: &[&str],
+    ) -> Result<BuildBundle> {
+        let bundle = self.make_app(project, build, &build.runnable)?;
+        let local_app_dir = bundle.bundle_dir.to_string_lossy();
+        let remote_app_path = self.new_install_app(&local_app_dir)?;
+
+        self.new_run_remote(&remote_app_path, args, envs, false)?;
+        Ok(bundle)
+    }
 }
 
 impl Device for IosDevice {
@@ -334,18 +441,13 @@ impl Device for IosDevice {
         args: &[&str],
         envs: &[&str],
     ) -> Result<BuildBundle> {
-        let build_bundle = self.install_app(project, build, &build.runnable)?;
-        if get_current_verbosity() < 1 {
-            // we log the full command for verbosity > 1, just log a short message when the user
-            // didn't ask for verbose output
-            user_facing_log(
-                "Running",
-                &format!("{} on {}", build.runnable.id, self.id),
-                0,
-            );
+        let xcode_version = xcode::get_xcode_version()?;
+        dbg!(&xcode_version);
+        if xcode_version > Version::new(16, 0, 0) {
+            self.new_run_app(project, build, args, envs)
+        } else {
+            self.run_app(project, build, args, envs)
         }
-        self.run_remote(&build_bundle, args, envs, false)?;
-        Ok(build_bundle)
     }
 }
 
