@@ -353,13 +353,14 @@ exit
             .arg(&self.id)
             .arg(remote_app_path);
 
-        log::info!("New run remote cmd: {command:?}");
         // Add CLI arguments
         args.iter()
             .map(|&s| shell_escape::escape(s.into()))
             .for_each(|arg| {
                 command.arg(&*arg);
             });
+        
+        log::info!("New run remote cmd: {command:?}");
 
         // Launch execution on the device
         let result = command
