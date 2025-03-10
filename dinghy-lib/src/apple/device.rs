@@ -116,7 +116,7 @@ impl IosDevice {
         .arg(&self.id)
         .arg(local_app_dir);
 
-        log::info!("New install APP cmd: {cmd:?}");
+        log::debug!("New install app cmd: {cmd:?}");
         let child = cmd
             .log_invocation(1)
             .stderr(Stdio::piped())
@@ -351,6 +351,7 @@ exit
         command
             .args("devicectl device process launch --console -d".split_whitespace())
             .arg(&self.id)
+            .arg("--") // Differentiate between devicectl args & CLI args
             .arg(remote_app_path);
 
         // Add CLI arguments
@@ -359,8 +360,8 @@ exit
             .for_each(|arg| {
                 command.arg(&*arg);
             });
-        
-        log::info!("New run remote cmd: {command:?}");
+
+        log::debug!("New run remote cmd: {command:?}");
 
         // Launch execution on the device
         let result = command
