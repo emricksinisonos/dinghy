@@ -107,13 +107,17 @@ impl IosDevice {
     fn new_install_app(&self, local_app_dir: &str) -> Result<String> {
         // We use stderr as output file to avoid creating a file to collect the JSON output
         // while keeping stdout output in terminal (in order to see the progress of the install)
-        let child = process::Command::new("xcrun")
-            .args(
-                "devicectl device install app --quiet --json-output /dev/stderr --device"
-                    .split_whitespace(),
-            )
-            .arg(&self.id)
-            .arg(local_app_dir)
+        let mut cmd = process::Command::new("xcrun");
+
+        cmd.args(
+            "devicectl device install app --quiet --json-output /dev/stderr --device"
+                .split_whitespace(),
+        )
+        .arg(&self.id)
+        .arg(local_app_dir);
+
+        log::info!("New install APP cmd: {cmd:?}");
+        let child = cmd
             .log_invocation(1)
             .stderr(Stdio::piped())
             .spawn()
@@ -349,6 +353,7 @@ exit
             .arg(&self.id)
             .arg(remote_app_path);
 
+        log::info!("New run remote cmd: {command:?}");
         // Add CLI arguments
         args.iter()
             .map(|&s| shell_escape::escape(s.into()))
